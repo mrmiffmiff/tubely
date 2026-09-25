@@ -5,8 +5,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -50,6 +48,20 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	assetPath := getAssetPath(videoID, mediaType)
+	assetDiskPath := cfg.getAssetDiskPath(assetPath)
+
+	dst, err := os.Create(assetDiskPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to create file on server", err)
+		return
+	}
+	defer dst.Close()
+	if _, err = io.Copy(dst, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error saving file", err)
+		return
+	}
+
 	vid, err := cfg.db.GetVideo(videoID)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Video likely doesn't exist", err)
@@ -61,21 +73,8 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	mediaTypeSplit := strings.Split(mediaType, "/")
-	fileExtension := mediaTypeSplit[len(mediaTypeSplit)-1]
-	savePath := filepath.Join(cfg.assetsRoot, fmt.Sprintf("%s.%s", videoID, fileExtension))
-
-	savedFile, err := os.Create(savePath)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error creating video file", err)
-		return
-	}
-
-	io.Copy(savedFile, file)
-
-	finalURL := fmt.Sprintf("http://localhost:%s/%s", cfg.port, savePath)
-
-	vid.ThumbnailURL = &finalURL
+	url := cfg.getAssetURL(assetPath)
+	vid.ThumbnailURL = &url
 
 	err = cfg.db.UpdateVideo(vid)
 	if err != nil {
