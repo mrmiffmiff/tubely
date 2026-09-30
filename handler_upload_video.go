@@ -78,6 +78,12 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	ratio, err := getVideoAspectRatio(tmpFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Problem getting video aspect ratio", err)
+		return
+	}
+
 	_, err = tmpFile.Seek(0, io.SeekStart)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Problem resetting tmp file pointer to start", err)
@@ -93,15 +99,24 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	randID := base64.RawURLEncoding.EncodeToString(randSlice)
 
 	assetKey := getAssetPath(randID, mediaType)
+	var prefix string
+	if ratio == "16:9" {
+		prefix = "landscape"
+	} else if ratio == "9:16" {
+		prefix = "portrait"
+	} else {
+		prefix = "other"
+	}
+	fullKey := fmt.Sprintf("%s/%s", prefix, assetKey)
 
 	_, err = cfg.s3Client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
-		Key:         &assetKey,
+		Key:         &fullKey,
 		Body:        tmpFile,
 		ContentType: &mediaType,
 	})
 
-	finalURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, assetKey)
+	finalURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, fullKey)
 	vid.VideoURL = &finalURL
 
 	err = cfg.db.UpdateVideo(vid)
