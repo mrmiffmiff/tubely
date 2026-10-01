@@ -42,12 +42,6 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	vid, err = cfg.dbVideoToSignedVideo(vid)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Problem converting to signed video", err)
-		return
-	}
-
 	if userID != vid.UserID {
 		respondWithError(w, http.StatusUnauthorized, "User does not own video", nil)
 		return
@@ -136,7 +130,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		ContentType: &mediaType,
 	})
 
-	finalURL := fmt.Sprintf("%s,%s", cfg.s3Bucket, fullKey)
+	finalURL := fmt.Sprintf("https://%s/%s", cfg.s3CfDistribution, fullKey)
 	vid.VideoURL = &finalURL
 
 	err = cfg.db.UpdateVideo(vid)
