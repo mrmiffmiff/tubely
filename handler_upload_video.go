@@ -90,6 +90,19 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	othFilePath, err := processVideoForFastStart(tmpFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error pre-processing video", err)
+		return
+	}
+	othFile, err := os.Open(othFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error opening preprocessed video", err)
+		return
+	}
+	defer os.Remove(othFile.Name())
+	defer othFile.Close()
+
 	randSlice := make([]byte, 32)
 	_, err = rand.Read(randSlice)
 	if err != nil {
@@ -100,11 +113,12 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	assetKey := getAssetPath(randID, mediaType)
 	var prefix string
-	if ratio == "16:9" {
+	switch ratio {
+	case "16:9":
 		prefix = "landscape"
-	} else if ratio == "9:16" {
+	case "9:16":
 		prefix = "portrait"
-	} else {
+	default:
 		prefix = "other"
 	}
 	fullKey := fmt.Sprintf("%s/%s", prefix, assetKey)
@@ -112,7 +126,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	_, err = cfg.s3Client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &fullKey,
-		Body:        tmpFile,
+		Body:        othFile,
 		ContentType: &mediaType,
 	})
 
